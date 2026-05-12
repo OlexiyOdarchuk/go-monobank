@@ -25,7 +25,7 @@ var (
 	ErrUnknownWebHookType = errors.New("unknown webhook type")
 )
 
-// VerifyWebhookSignature returns nil iff xSign is a valid ECDSA signature of
+// VerifyWebhookSignature returns nil if xSign is a valid ECDSA signature of
 // body produced by the bank's serverPubKey.
 //
 //	sk, _ := client.ServerKey(ctx)
