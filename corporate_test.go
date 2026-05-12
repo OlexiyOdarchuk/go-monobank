@@ -56,15 +56,18 @@ func TestCorporateClient_RegistrationStatus(t *testing.T) {
 
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		var got struct {
-			Pubkey string `json:"pubkey"`
-		}
+		var got RegistrationStatusRequest
 		require.NoError(t, json.Unmarshal(body, &got))
 		expected := base64.StdEncoding.EncodeToString([]byte(pubkeyPEM))
 		assert.Equal(t, expected, got.Pubkey)
 
+		resp, err := json.Marshal(RegistrationStatusResponse{
+			Status: RegistrationStatusApproved,
+			KeyID:  "abc123",
+		})
+		require.NoError(t, err)
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"Approved","keyId":"abc123"}`))
+		_, _ = w.Write(resp)
 	}))
 	defer server.Close()
 
