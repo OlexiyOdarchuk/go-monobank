@@ -139,9 +139,7 @@ func (c CorporateClient) RegistrationStatus(ctx context.Context, pubkeyPEM []byt
 
 	const urlPath = "/personal/auth/registration/status"
 
-	body, err := json.Marshal(struct {
-		Pubkey string `json:"pubkey"`
-	}{
+	body, err := json.Marshal(RegistrationStatusRequest{
 		Pubkey: base64.StdEncoding.EncodeToString(pubkeyPEM),
 	})
 	if err != nil {

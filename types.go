@@ -147,9 +147,17 @@ const (
 	RegistrationStatusApproved RegistrationStatus = "Approved"
 )
 
-// RegistrationStatusResponse is the result of CorporateClient.RegistrationStatus.
-// KeyID is set once mono approves the registration and corresponds to the
-// X-Key-Id the corporate client must use thereafter.
+// RegistrationStatusRequest is the body of POST /personal/auth/registration/status.
+// Pubkey is the base64-encoded PEM file containing the secp256k1 public key
+// submitted during registration.
+type RegistrationStatusRequest struct {
+	Pubkey string `json:"pubkey"`
+}
+
+// RegistrationStatusResponse is the body returned by
+// POST /personal/auth/registration/status. KeyID is set once mono approves
+// the registration and corresponds to the X-Key-Id the corporate client must
+// use thereafter.
 type RegistrationStatusResponse struct {
 	Status RegistrationStatus `json:"status"`
 	KeyID  string             `json:"keyId"`
