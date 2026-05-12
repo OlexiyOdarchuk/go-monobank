@@ -3,12 +3,10 @@
 //
 // It covers three authorization modes:
 //
-//   - Public — no auth; currency rates and the bank's signing key
-//     (see [Client.Currency], [Client.ServerKey]).
-//   - Personal — a single user's token (see [NewPersonalClient],
-//     [NewPersonalAuthorizer]).
-//   - Corporate / providers — service-level access via an ECDSA key pair
-//     (see [NewCorporateClient], [NewCorpAuthMaker]).
+//   - Public — no auth; see [PublicAPI].
+//   - Personal — a single user's token; see [PersonalAPI].
+//   - Corporate / providers — service-level access via an ECDSA key pair;
+//     see [CorporateAPI].
 //
 // # Webhooks
 //
