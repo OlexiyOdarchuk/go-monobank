@@ -2,7 +2,6 @@ package monobank
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -44,8 +43,8 @@ func (stubAuth) SetAuth(_ *http.Request) error { return nil }
 // stubAuthMaker satisfies CorpAuthMakerAPI without doing any real signing.
 type stubAuthMaker struct{}
 
-func (stubAuthMaker) New(_ string) Authorizer                       { return stubAuth{} }
-func (stubAuthMaker) NewPermissions(_ ...string) Authorizer         { return stubAuth{} }
+func (stubAuthMaker) New(_ string) Authorizer               { return stubAuth{} }
+func (stubAuthMaker) NewPermissions(_ ...string) Authorizer { return stubAuth{} }
 
 func TestCorporateClient_RegistrationStatus(t *testing.T) {
 	const pubkeyPEM = "-----BEGIN PUBLIC KEY-----\nABC\n-----END PUBLIC KEY-----\n"
@@ -58,8 +57,7 @@ func TestCorporateClient_RegistrationStatus(t *testing.T) {
 		require.NoError(t, err)
 		var got RegistrationStatusRequest
 		require.NoError(t, json.Unmarshal(body, &got))
-		expected := base64.StdEncoding.EncodeToString([]byte(pubkeyPEM))
-		assert.Equal(t, expected, got.Pubkey)
+		assert.Equal(t, []byte(pubkeyPEM), got.Pubkey)
 
 		resp, err := json.Marshal(RegistrationStatusResponse{
 			Status: RegistrationStatusApproved,
