@@ -3,7 +3,6 @@ package monobank
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -139,9 +138,7 @@ func (c CorporateClient) RegistrationStatus(ctx context.Context, pubkeyPEM []byt
 
 	const urlPath = "/personal/auth/registration/status"
 
-	body, err := json.Marshal(RegistrationStatusRequest{
-		Pubkey: base64.StdEncoding.EncodeToString(pubkeyPEM),
-	})
+	body, err := json.Marshal(RegistrationStatusRequest{Pubkey: pubkeyPEM})
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal: %w", err)
 	}

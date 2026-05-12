@@ -148,10 +148,11 @@ const (
 )
 
 // RegistrationStatusRequest is the body of POST /personal/auth/registration/status.
-// Pubkey is the base64-encoded PEM file containing the secp256k1 public key
-// submitted during registration.
+// Pubkey is the PEM file containing the secp256k1 public key submitted during
+// registration. encoding/json base64-encodes []byte fields automatically, so
+// the wire format matches the base64 string the bank expects.
 type RegistrationStatusRequest struct {
-	Pubkey string `json:"pubkey"`
+	Pubkey []byte `json:"pubkey"`
 }
 
 // RegistrationStatusResponse is the body returned by
