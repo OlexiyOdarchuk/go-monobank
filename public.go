@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/decred/dcrd/dcrec/secp256k1/v2"
+	secp256k1 "github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
 type PublicAPI interface {
