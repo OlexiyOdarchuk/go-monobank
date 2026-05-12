@@ -198,6 +198,45 @@ func TestWebhookHandler_keyRotation(t *testing.T) {
 	assert.Equal(t, testServerKeyID, h.KeyID())
 }
 
+// Regression: a previous Deduper API combined check-and-mark into Seen(id),
+// which meant a transient OnEvent failure (HTTP 500) would still mark the id
+// as seen and the retry from mono would be silently ACK'd without ever
+// running OnEvent. The handler now only Adds the id after a successful
+// OnEvent, so the next attempt for the same id gets a fresh try.
+func TestWebhookHandler_failureLetsMonoRetryWithDedup(t *testing.T) {
+	var attempts atomic.Int32
+	prov := &fakeKeyProvider{key: &ServerKey{ID: testServerKeyID, PubKey: testServerPubKey(t)}}
+	h, err := NewWebhookHandler(context.Background(), WebhookHandlerOptions{
+		Keys:  prov,
+		Dedup: NewMemoryDeduper(64),
+		OnEvent: func(context.Context, *WebHookResponse) error {
+			n := attempts.Add(1)
+			if n == 1 {
+				return errors.New("transient downstream failure")
+			}
+			return nil
+		},
+	})
+	require.NoError(t, err)
+
+	// First delivery: OnEvent fails → 500, id NOT recorded in deduper.
+	w1 := httptest.NewRecorder()
+	h.ServeHTTP(w1, signedPOST(testWebhookBody, testWebhookSign, testServerKeyID))
+	assert.Equal(t, http.StatusInternalServerError, w1.Code)
+
+	// Mono's retry: OnEvent must run again and succeed.
+	w2 := httptest.NewRecorder()
+	h.ServeHTTP(w2, signedPOST(testWebhookBody, testWebhookSign, testServerKeyID))
+	assert.Equal(t, http.StatusOK, w2.Code)
+	assert.Equal(t, int32(2), attempts.Load(), "retry must actually invoke OnEvent")
+
+	// After success, further retries are short-circuited by the deduper.
+	w3 := httptest.NewRecorder()
+	h.ServeHTTP(w3, signedPOST(testWebhookBody, testWebhookSign, testServerKeyID))
+	assert.Equal(t, http.StatusOK, w3.Code)
+	assert.Equal(t, int32(2), attempts.Load(), "duplicates must not run OnEvent")
+}
+
 func TestWebhookHandler_endToEnd_overHTTP(t *testing.T) {
 	var got *WebHookResponse
 	h, _ := newTestHandler(t, WebhookHandlerOptions{
