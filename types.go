@@ -118,8 +118,7 @@ type WebHookRequest struct {
 
 // Known WebHookResponse.Type values.
 const (
-	// WebHookTypeStatementItem is the only type mono currently sends for
-	// personal-API webhooks (a single bank-account statement entry).
+	// WebHookTypeStatementItem — a single bank-account statement entry.
 	WebHookTypeStatementItem = "StatementItem"
 )
 

@@ -1,10 +1,11 @@
-// Command webhook is a runnable example of receiving and authenticating
+// Command webhook is a minimal recipe for receiving and authenticating
 // personal-API webhooks from monobank.
 //
 // Subscribe a public URL via PersonalClient.SetWebHook and every statement
-// event will arrive here as POST /webhook with the body, X-Sign and X-Key-Id
-// headers. We fetch the bank's signing key once at start-up and refresh it
-// whenever mono rotates it (incoming X-Key-Id no longer matches).
+// event will arrive here as POST /webhook with body and X-Sign / X-Key-Id
+// headers. This example loads the bank's signing key once at start-up;
+// production code should refresh it whenever an incoming X-Key-Id stops
+// matching ServerKey.ID (mono's rotation signal).
 package main
 
 import (
@@ -12,43 +13,21 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sync"
 
 	"github.com/vtopc/go-monobank"
 )
 
-type keyCache struct {
-	mu     sync.RWMutex
-	client monobank.Client
-	key    *monobank.ServerKey
-}
-
-func (c *keyCache) refresh(ctx context.Context) error {
-	sk, err := c.client.ServerKey(ctx)
-	if err != nil {
-		return err
-	}
-	c.mu.Lock()
-	c.key = sk
-	c.mu.Unlock()
-	return nil
-}
-
-func (c *keyCache) get() *monobank.ServerKey {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.key
-}
-
 func main() {
-	keys := &keyCache{client: monobank.NewClient(nil)}
-	if err := keys.refresh(context.Background()); err != nil {
-		log.Fatalf("initial ServerKey: %v", err)
+	client := monobank.NewClient(nil)
+	sk, err := client.ServerKey(context.Background())
+	if err != nil {
+		log.Fatalf("ServerKey: %v", err)
 	}
+	log.Printf("loaded mono key id=%s", sk.ID)
 
 	http.HandleFunc("/webhook", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			// Mono pings the URL with GET when you subscribe a webhook.
+			// Mono pings the URL with GET when subscribing a webhook.
 			return
 		}
 		body, err := io.ReadAll(r.Body)
@@ -56,23 +35,14 @@ func main() {
 			http.Error(w, "read body", http.StatusBadRequest)
 			return
 		}
-
-		sk := keys.get()
-		if r.Header.Get("X-Key-Id") != sk.ID {
-			if err := keys.refresh(r.Context()); err != nil {
-				log.Printf("refresh ServerKey: %v", err)
-			}
-			sk = keys.get()
-		}
 		if err := sk.Verify(body, r.Header.Get("X-Sign")); err != nil {
 			http.Error(w, "bad signature", http.StatusUnauthorized)
 			return
 		}
-
 		event, err := monobank.ParseWebHook(body)
 		if err != nil {
 			log.Printf("parse webhook: %v", err)
-			return // already authenticated, just unknown
+			return
 		}
 		t := event.Data.Transaction
 		log.Printf("account=%s amount=%d %q hold=%v",

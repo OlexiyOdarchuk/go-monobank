@@ -53,13 +53,18 @@ func VerifyWebhookSignature(pub *ecdsa.PublicKey, body []byte, xSign string) err
 			return nil
 		}
 	}
+
 	var asn1Sig struct{ R, S *big.Int }
-	if _, err := asn1.Unmarshal(sig, &asn1Sig); err == nil &&
-		asn1Sig.R != nil && asn1Sig.S != nil &&
-		ecdsa.Verify(pub, digest[:], asn1Sig.R, asn1Sig.S) {
-		return nil
+	if _, err := asn1.Unmarshal(sig, &asn1Sig); err != nil {
+		return ErrBadSignature
 	}
-	return ErrBadSignature
+	if asn1Sig.R == nil || asn1Sig.S == nil {
+		return ErrBadSignature
+	}
+	if !ecdsa.Verify(pub, digest[:], asn1Sig.R, asn1Sig.S) {
+		return ErrBadSignature
+	}
+	return nil
 }
 
 // Verify is a convenience wrapper around [VerifyWebhookSignature] using this
@@ -75,9 +80,6 @@ func (k *ServerKey) Verify(body []byte, xSign string) error {
 // payload's "type" is not a known WebHookType* constant, the response is
 // still returned but wrapped in [ErrUnknownWebHookType] so callers can opt
 // out of processing unfamiliar events.
-//
-// ParseWebHook does no signature verification — call [VerifyWebhookSignature]
-// or [ServerKey.Verify] first.
 func ParseWebHook(body []byte) (*WebHookResponse, error) {
 	var v WebHookResponse
 	if err := json.Unmarshal(body, &v); err != nil {
