@@ -152,68 +152,53 @@ func (a CorpAuth) signString(str string) (string, error) {
 	return base64.StdEncoding.EncodeToString(bb), nil
 }
 
-// decodePrivateKey decodes private key into Elliptic Curve Digital Signature Algorithm private key.
-// TODO: switch to secp256k1.PrivKeyFromBytes() or https://github.com/square/go-jose/pull/278/files
+// decodePrivateKey extracts an ECDSA private key from PEM-encoded SEC1
+// (`EC PRIVATE KEY`) data. Uses secp256k1's typed helpers from
+// dcrd/dcrec/secp256k1/v4 instead of reimplementing x509.parseECPrivateKey.
 func decodePrivateKey(b []byte) (*ecdsa.PrivateKey, error) {
 	for {
-		var privateKeyPemBlock *pem.Block
-		privateKeyPemBlock, b = pem.Decode(b)
-		if privateKeyPemBlock == nil {
-			break
+		var block *pem.Block
+		block, b = pem.Decode(b)
+		if block == nil {
+			return nil, ErrNoPrivateKey
 		}
-
-		if privateKeyPemBlock.Type == ecPrivateKeyBlockType {
-			ret, err := parseECPrivateKey(privateKeyPemBlock.Bytes)
-			if err != nil {
-				return nil, err
-			}
-
-			return ret, err
+		if block.Type != ecPrivateKeyBlockType {
+			continue
 		}
+		return parseECPrivateKey(block.Bytes)
 	}
-
-	return nil, ErrNoPrivateKey
 }
 
-// parseECPrivateKey returns Elliptic Curve Digital Signature Algorithm private key from file content.
-// TODO: looks as copy-paste from x509.parseECPrivateKey()
+// parseECPrivateKey reads a SEC1 ASN.1 EC private-key blob and constructs
+// an ecdsa.PrivateKey on secp256k1.
 func parseECPrivateKey(b []byte) (*ecdsa.PrivateKey, error) {
 	var privKey ecPrivateKey
 	if _, err := asn1.Unmarshal(b, &privKey); err != nil {
 		return nil, fmt.Errorf("failed to parse EC private key: %w", err)
 	}
 	if privKey.Version != ecPrivateKeyVersion {
-		//nolint:goerr113
 		return nil, fmt.Errorf("unknown EC private key version %d", privKey.Version)
 	}
 
 	curve := secp256k1.S256()
-	k := new(big.Int).SetBytes(privKey.PrivateKey)
-	curveOrder := curve.Params().N
-	if k.Cmp(curveOrder) >= 0 {
+	// SEC1 allows leading zeros; secp256k1 expects exactly 32 bytes. Strip
+	// padding and validate that what's left is in the curve order.
+	raw := privKey.PrivateKey
+	expected := (curve.Params().N.BitLen() + 7) / 8
+	for len(raw) > expected && raw[0] == 0 {
+		raw = raw[1:]
+	}
+	if len(raw) > expected {
+		return nil, ErrInvalidPrivateKey
+	}
+
+	if new(big.Int).SetBytes(raw).Cmp(curve.Params().N) >= 0 {
 		return nil, ErrInvalidEC
 	}
 
-	priv := new(ecdsa.PrivateKey)
-	priv.Curve = curve
-	priv.D = k
+	padded := make([]byte, expected)
+	copy(padded[expected-len(raw):], raw)
 
-	privateKey := make([]byte, (curveOrder.BitLen()+7)/8)
-
-	// Some private keys have leading zero padding. This is invalid
-	// according to [SEC1], but this code will ignore it.
-	for len(privKey.PrivateKey) > len(privateKey) {
-		if privKey.PrivateKey[0] != 0 {
-			return nil, ErrInvalidPrivateKey
-		}
-		privKey.PrivateKey = privKey.PrivateKey[1:]
-	}
-
-	// Some private keys remove all leading zeros, this is also invalid
-	// according to [SEC1] but since OpenSSL used to do this, we ignore
-	// this too.
-	copy(privateKey[len(privateKey)-len(privKey.PrivateKey):], privKey.PrivateKey)
-	priv.X, priv.Y = curve.ScalarBaseMult(privateKey)
-
+	priv := secp256k1.PrivKeyFromBytes(padded).ToECDSA()
 	return priv, nil
 }

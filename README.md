@@ -8,7 +8,11 @@ Monobank REST API client.
 - Personal API(with Token authorization).
 - API for providers(corporate) with authorization.
 - Webhooks(including API for providers).
-- Webhook signature verification (ECDSA secp256k1) via [Client.ServerKey] and [VerifyWebhookSignature]; see `examples/webhook`.
+- Webhook signature verification (ECDSA secp256k1) via `Client.ServerKey` and `VerifyWebhookSignature`.
+- Ready-to-mount `WebhookHandler` (`http.Handler`) with key rotation and optional deduplication.
+- Functional options (`New`, `NewPersonal`, `NewCorporate`) with HTTP retry + `Retry-After`.
+- `TransactionsRange` paginates `/personal/statement` across arbitrary date ranges (mono's 31-day window).
+- `CurrencyCode` and `MCC` enums with helpers for ISO 4217 names and merchant categorisation.
 - Jars(only in Personal API).
 
 ## Installation
@@ -107,6 +111,28 @@ func main() {
 ## Similar projects
 - https://github.com/shal/mono (last update 16.05.2020)
 - https://github.com/artemrys/go-monobank-api (no corporate API)
+
+#### Webhook handler
+```go
+client := monobank.NewClient(nil)
+h, err := monobank.NewWebhookHandler(ctx, monobank.WebhookHandlerOptions{
+    Keys:  client,
+    Dedup: monobank.NewMemoryDeduper(1024),
+    OnEvent: func(ctx context.Context, e *monobank.WebHookResponse) error {
+        t := e.Data.Transaction
+        log.Printf("%s %s: %d %s [%s]", e.Data.AccountID, t.ID,
+            t.Amount, monobank.CurrencyCode(t.CurrencyCode), t.MCCCode().Category())
+        return nil
+    },
+})
+if err != nil { log.Fatal(err) }
+http.Handle("/webhook", h)
+```
+
+The handler responds 200 to mono's GET ping, verifies `X-Sign` against the
+cached `ServerKey` (re-fetching on `X-Key-Id` rotation), parses the body,
+runs `OnEvent`, and ACKs duplicates via `Dedup`. Returning a non-nil error
+from `OnEvent` yields HTTP 500 so mono retries.
 
 ## TODO
 - More unit tests

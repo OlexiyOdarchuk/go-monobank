@@ -37,6 +37,13 @@ type WebhookHandlerOptions struct {
 	// handler can't surface through HTTP (e.g. a key refresh that fails
 	// while still trying to verify a request). Use it for logging.
 	OnError func(err error)
+
+	// Dedup is optional. When set, the handler consults it before calling
+	// OnEvent and skips duplicates (responding 200 so mono stops retrying).
+	// Mono retries failed deliveries after 60s and 600s — without a deduper,
+	// an event your OnEvent successfully processed but failed to ACK might
+	// be processed twice.
+	Dedup Deduper
 }
 
 // WebhookHandler is a ready-to-mount http.Handler that receives signed
@@ -162,6 +169,12 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Body is authenticated but unparseable — log and 400.
 		h.reportError(fmt.Errorf("parse webhook: %w", err))
 		http.Error(w, "malformed payload", http.StatusBadRequest)
+		return
+	}
+
+	if h.opts.Dedup != nil && h.opts.Dedup.Seen(event.Data.Transaction.ID) {
+		// Already processed — ACK so mono stops retrying.
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
