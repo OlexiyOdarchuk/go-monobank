@@ -138,6 +138,24 @@ type TokenRequest struct {
 	AcceptURL string `json:"acceptUrl"`      // URL to redirect client or build QR on top of it.
 }
 
+// RegistrationStatus is the state of a corporate-API registration request.
+type RegistrationStatus string
+
+// Possible RegistrationStatus values.
+const (
+	RegistrationStatusNew      RegistrationStatus = "New"
+	RegistrationStatusDeclined RegistrationStatus = "Declined"
+	RegistrationStatusApproved RegistrationStatus = "Approved"
+)
+
+// RegistrationStatusResponse is the result of CorporateClient.RegistrationStatus.
+// KeyID is set once mono approves the registration and corresponds to the
+// X-Key-Id the corporate client must use thereafter.
+type RegistrationStatusResponse struct {
+	Status RegistrationStatus `json:"status"`
+	KeyID  string             `json:"keyId"`
+}
+
 type CorpSettings struct {
 	Pubkey     string  `json:"pubkey"`
 	Name       string  `json:"name"`
