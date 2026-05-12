@@ -5,23 +5,27 @@ import (
 	"sync"
 )
 
-// Deduper remembers transaction IDs seen recently so callers can answer
-// "did we already process this event?". Mono retries failed deliveries
-// after 60s and 600s; a deduper of capacity ≥ a few hundred is plenty for
-// most workloads.
+// Deduper remembers transaction IDs the handler has already processed
+// successfully so it can short-circuit retries from mono.
+//
+// Mono retries failed deliveries after 60s and 600s. The handler calls
+// Has(id) before invoking OnEvent and Add(id) only after OnEvent succeeds
+// — that way a transient OnEvent failure (which produces HTTP 500) does
+// not poison the deduper and prevent the next retry from being processed.
 //
 // The default LRU implementation ([NewMemoryDeduper]) is safe for
-// concurrent use. Plug in your own implementation (Redis, SQLite, …) by
-// satisfying the [Deduper] interface — for example to share state across
-// instances.
+// concurrent use. Plug in your own (Redis, SQLite, etc.) by satisfying
+// the interface — useful for sharing dedup state across replicas.
 type Deduper interface {
-	// Seen reports whether id has been observed before. If the id is new
-	// it is recorded as seen and Seen returns false.
-	Seen(id string) bool
+	// Has reports whether id has been recorded by a previous Add.
+	Has(id string) bool
+	// Add records id as processed. It is safe to call Add for the same
+	// id more than once.
+	Add(id string)
 }
 
-// NewMemoryDeduper returns an in-memory LRU [Deduper] of the given capacity.
-// Capacity ≤ 0 falls back to 1024.
+// NewMemoryDeduper returns an in-memory LRU Deduper of the given capacity.
+// Capacity <= 0 falls back to 1024.
 func NewMemoryDeduper(capacity int) *MemoryDeduper {
 	if capacity <= 0 {
 		capacity = 1024
@@ -41,29 +45,41 @@ type MemoryDeduper struct {
 	index    map[string]*list.Element
 }
 
-// Seen records id and returns whether it had already been recorded.
-func (d *MemoryDeduper) Seen(id string) bool {
+// Has reports whether id is currently tracked.
+func (d *MemoryDeduper) Has(id string) bool {
 	if id == "" {
-		// Empty id can't be deduped (no stable key); treat as new every time
-		// rather than collapse every empty-id event into one.
 		return false
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	_, ok := d.index[id]
+	if ok {
+		// Refresh recency; if a caller is checking the same id repeatedly
+		// they're "using" it.
+		d.order.MoveToFront(d.index[id])
+	}
+	return ok
+}
+
+// Add records id as seen. No-op for empty ids.
+func (d *MemoryDeduper) Add(id string) {
+	if id == "" {
+		return
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	if el, ok := d.index[id]; ok {
 		d.order.MoveToFront(el)
-		return true
+		return
 	}
 	if d.order.Len() == d.capacity {
-		oldest := d.order.Back()
-		if oldest != nil {
+		if oldest := d.order.Back(); oldest != nil {
 			delete(d.index, oldest.Value.(string))
 			d.order.Remove(oldest)
 		}
 	}
 	d.index[id] = d.order.PushFront(id)
-	return false
 }
 
 // Len returns the number of currently-tracked ids; useful for diagnostics.

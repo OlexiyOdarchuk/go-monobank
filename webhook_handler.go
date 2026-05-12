@@ -172,7 +172,8 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.opts.Dedup != nil && h.opts.Dedup.Seen(event.Data.Transaction.ID) {
+	id := event.Data.Transaction.ID
+	if h.opts.Dedup != nil && h.opts.Dedup.Has(id) {
 		// Already processed — ACK so mono stops retrying.
 		w.WriteHeader(http.StatusOK)
 		return
@@ -180,9 +181,13 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.opts.OnEvent(r.Context(), event); err != nil {
 		h.reportError(fmt.Errorf("OnEvent: %w", err))
-		// 5xx → mono will retry (after 60s and 600s).
+		// 5xx → mono will retry (after 60s and 600s). We deliberately do
+		// NOT mark id as seen — let the retry actually run OnEvent again.
 		http.Error(w, "callback failed", http.StatusInternalServerError)
 		return
+	}
+	if h.opts.Dedup != nil {
+		h.opts.Dedup.Add(id)
 	}
 	w.WriteHeader(http.StatusOK)
 }
