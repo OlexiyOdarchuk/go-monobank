@@ -41,7 +41,10 @@ func (c commonClient) ClientInfo(ctx context.Context) (*ClientInfo, error) {
 	return &v, err
 }
 
-// TODO: make `to` optional
+// MaxStatementWindow is the longest range /personal/statement accepts in a
+// single call. Use [commonClient.TransactionsRange] to span longer ranges.
+const MaxStatementWindow = 31 * 24 * time.Hour
+
 func (c commonClient) Transactions(ctx context.Context, accountID string, from, to time.Time) (
 	Transactions, error) {
 
@@ -57,6 +60,34 @@ func (c commonClient) Transactions(ctx context.Context, accountID string, from, 
 	err = c.do(req, &v, http.StatusOK)
 
 	return v, err
+}
+
+// TransactionsRange returns statements across an arbitrary date range by
+// splitting it into successive 31-day windows (mono's single-call limit)
+// and concatenating the results in chronological order.
+//
+// If to is zero or before from the call returns nil, nil.
+func (c commonClient) TransactionsRange(ctx context.Context, accountID string, from, to time.Time) (
+	Transactions, error) {
+
+	if to.IsZero() || !to.After(from) {
+		return nil, nil
+	}
+
+	var all Transactions
+	for cursor := from; cursor.Before(to); {
+		end := cursor.Add(MaxStatementWindow)
+		if end.After(to) {
+			end = to
+		}
+		chunk, err := c.Transactions(ctx, accountID, cursor, end)
+		if err != nil {
+			return nil, fmt.Errorf("range %s..%s: %w", cursor.Format(time.RFC3339), end.Format(time.RFC3339), err)
+		}
+		all = append(all, chunk...)
+		cursor = end
+	}
+	return all, nil
 }
 
 func (c commonClient) setWebHook(ctx context.Context, uri, urlPath string) error {

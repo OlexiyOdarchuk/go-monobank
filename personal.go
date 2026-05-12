@@ -27,6 +27,15 @@ func NewPersonalClient(client *http.Client) PersonalClient {
 	}
 }
 
+// NewPersonal returns a PersonalClient built from the supplied options.
+// Auth is set up via the WithAuth method on the returned value.
+//
+//	c := monobank.NewPersonal(monobank.WithRetry(5, 0, 0)).
+//	    WithAuth(monobank.NewPersonalAuthorizer(token))
+func NewPersonal(opts ...Option) PersonalClient {
+	return PersonalClient{commonClient: commonClient{Client: New(opts...)}}
+}
+
 // WithAuth returns copy of PersonalClient with authorizer
 func (c PersonalClient) WithAuth(auth Authorizer) PersonalClient {
 	c.withAuth(auth)

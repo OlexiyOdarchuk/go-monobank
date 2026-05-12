@@ -71,6 +71,20 @@ func NewCorporateClient(client *http.Client, authMaker CorpAuthMakerAPI) (Corpor
 	}, nil
 }
 
+// NewCorporate returns a CorporateClient built from the supplied options.
+// authMaker is required.
+//
+//	c, err := monobank.NewCorporate(authMaker, monobank.WithRetry(5, 0, 0))
+func NewCorporate(authMaker CorpAuthMakerAPI, opts ...Option) (CorporateClient, error) {
+	if authMaker == nil {
+		return CorporateClient{}, ErrEmptyAuthMaker
+	}
+	return CorporateClient{
+		commonClient: commonClient{Client: New(opts...)},
+		authMaker:    authMaker,
+	}, nil
+}
+
 // Auth initializes access.
 func (c CorporateClient) Auth(ctx context.Context, callbackURL string, permissions ...string) (*TokenRequest, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlPathAuth, http.NoBody)

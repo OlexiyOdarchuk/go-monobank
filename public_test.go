@@ -4,11 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/vtopc/go-rest"
 )
 
 // checks that Client satisfies PublicAPI
@@ -27,10 +27,8 @@ func TestClient_ServerKey(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := Client{
-		baseURL:    server.URL,
-		restClient: rest.NewClient(server.Client()),
-	}
+	base, _ := url.Parse(server.URL)
+	c := Client{baseURL: base, http: server.Client()}
 
 	sk, err := c.ServerKey(context.Background())
 	require.NoError(t, err)
@@ -52,10 +50,8 @@ func TestClient_ServerKey_invalidPubKey(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := Client{
-		baseURL:    server.URL,
-		restClient: rest.NewClient(server.Client()),
-	}
+	base, _ := url.Parse(server.URL)
+	c := Client{baseURL: base, http: server.Client()}
 
 	_, err := c.ServerKey(context.Background())
 	assert.ErrorIs(t, err, ErrInvalidPubKey)

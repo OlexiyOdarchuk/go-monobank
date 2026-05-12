@@ -3,12 +3,12 @@ package monobank
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/vtopc/go-rest"
 )
 
 func TestClient_do(t *testing.T) {
@@ -37,21 +37,17 @@ func TestClient_do(t *testing.T) {
 				assert.Equal(t, tc.method, r.Method)
 				hasSuffix(t, r.URL.String(), tc.urlPostfix)
 
-				// Send response to be tested
 				w.WriteHeader(tc.expectedStatusCode)
 				_, _ = w.Write(tc.body)
 			}))
 			defer server.Close()
 
-			c := Client{
-				baseURL:    server.URL,
-				restClient: rest.NewClient(server.Client()),
-			}
+			base, _ := url.Parse(server.URL)
+			c := Client{baseURL: base, http: server.Client()}
 
 			req, err := http.NewRequest(tc.method, tc.urlPostfix, http.NoBody)
 			require.NoError(t, err)
 
-			// test:
 			err = c.do(req, &tc.v, tc.expectedStatusCode)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, tc.v)

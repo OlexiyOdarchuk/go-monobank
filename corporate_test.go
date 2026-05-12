@@ -7,11 +7,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/vtopc/go-rest"
 )
 
 // checks that Client satisfies interface
@@ -70,8 +70,9 @@ func TestCorporateClient_RegistrationStatus(t *testing.T) {
 
 	c, err := NewCorporateClient(nil, stubAuthMaker{})
 	require.NoError(t, err)
-	c.baseURL = server.URL
-	c.restClient = rest.NewClient(server.Client())
+	base, _ := url.Parse(server.URL)
+	c.baseURL = base
+	c.http = server.Client()
 
 	resp, err := c.RegistrationStatus(context.Background(), []byte(pubkeyPEM))
 	require.NoError(t, err)
