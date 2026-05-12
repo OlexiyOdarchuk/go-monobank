@@ -28,11 +28,6 @@ var (
 // VerifyWebhookSignature returns nil if xSign is a valid ECDSA signature of
 // body produced by the bank's serverPubKey.
 //
-//	sk, _ := client.ServerKey(ctx)
-//	if err := monobank.VerifyWebhookSignature(sk.PubKey, body, r.Header.Get("X-Sign")); err != nil {
-//	    // reject
-//	}
-//
 // Mono currently encodes the signature as a raw 64-byte r||s pair (base64);
 // ASN.1 DER is accepted as a fallback so future encoding changes don't break
 // callers.
@@ -46,12 +41,16 @@ func VerifyWebhookSignature(pub *ecdsa.PublicKey, body []byte, xSign string) err
 	}
 	digest := sha256.Sum256(body)
 
-	if len(sig) == 64 {
-		r := new(big.Int).SetBytes(sig[:32])
-		s := new(big.Int).SetBytes(sig[32:])
+	// secp256k1 ECDSA: r and s are 32 bytes each in the raw r||s encoding.
+	const rawSigLen = 2 * secp256k1CoordinateBytes
+	if len(sig) == rawSigLen {
+		r := new(big.Int).SetBytes(sig[:secp256k1CoordinateBytes])
+		s := new(big.Int).SetBytes(sig[secp256k1CoordinateBytes:])
 		if ecdsa.Verify(pub, digest[:], r, s) {
 			return nil
 		}
+		// raw r||s did not verify — fall through to ASN.1 DER, since some
+		// encoders produce DER that also happens to be 64 bytes long.
 	}
 
 	var asn1Sig struct{ R, S *big.Int }
