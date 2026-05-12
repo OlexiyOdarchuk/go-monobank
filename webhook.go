@@ -14,7 +14,7 @@ import (
 // Webhook errors.
 var (
 	// ErrBadSignature is returned by VerifyWebhookSignature when the
-	// signature does not match. Use errors.Is to detect it.
+	// signature does not match.
 	ErrBadSignature = errors.New("webhook signature is invalid")
 	// ErrBadSignatureEncoding is returned when X-Sign is not valid base64.
 	ErrBadSignatureEncoding = errors.New("X-Sign is not valid base64")
